@@ -1,24 +1,38 @@
 #!/usr/bin/env bash
 set -e
 
-# 1. requirements.txt
-cat <<EOF > requirements.txt
+# 1. Generate or overwrite deploy key
+ssh-keygen -t ed25519 -C "deploy@yourserver" -f ~/.ssh/public-github-deploy -N ""
+
+# 2. Show public key for GitHub
+echo "Add this public key to GitHub Deploy Keys:"
+cat ~/.ssh/public-github-deploy.pub
+
+# 3. Configure SSH for this key
+mkdir -p ~/.ssh
+cat <<EOF >> ~/.ssh/config
+Host github.com-PUBLIC-GitHub
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/public-github-deploy
+EOF
+chmod 600 ~/.ssh/config
+
+# 4. Create project files
+cat <<EOL > requirements.txt
 Flask
 Flask-SQLAlchemy
 python-dotenv
-Flask-Migrate
-EOF
+EOL
 
-# 2. .env.example
-cat <<EOF > .env.example
+cat <<EOL > .env.example
 DATABASE_URL=sqlite:///tasks.db
 PORT=5000
 FLASK_APP=app.py
 FLASK_ENV=development
-EOF
+EOL
 
-# 3. Dockerfile
-cat <<EOF > Dockerfile
+cat <<EOL > Dockerfile
 FROM python:3.11-slim
 WORKDIR /app
 COPY requirements.txt ./
@@ -26,17 +40,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 5000
 CMD ["flask", "run", "--host=0.0.0.0"]
-EOF
+EOL
 
-# 4. GitHub Actions workflow
 mkdir -p .github/workflows
-cat <<EOF > .github/workflows/ci.yml
+cat <<EOL > .github/workflows/ci.yml
 name: CI
+
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -45,26 +60,35 @@ jobs:
       FLASK_ENV: testing
       DATABASE_URL: sqlite:///test_tasks.db
       PORT: 5000
+
     steps:
       - uses: actions/checkout@v3
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Initialize migrations
-        run: |
-          flask db init || echo "Already initialized"
-          flask db migrate --message "CI" || echo "No changes"
-          flask db upgrade
-      - name: Run health check
-        run: |
-          nohup flask run --host=0.0.0.0 --port=5000 &
-          sleep 5
-          curl --fail http://localhost:5000/health
-EOF
+          pip install Flask Flask-SQLAlchemy python-dotenv
 
-# 5. Make the script executable locally after cloning
+      - name: Start Flask app
+        run: |
+          env FLASK_APP=app.py nohup python -m flask run --host=0.0.0.0 --port=5000 > flask.log 2>&1 &
+          sleep 10
+
+      - name: Health check
+        run: |
+          curl --retry 5 --retry-delay 2 --retry-connrefused --fail http://localhost:5000/health
+EOL
+
+chmod +x setup.sh
+
+# 5. Commit and push via deploy key
+git remote remove origin 2>/dev/null || true
+git remote add origin git@github.com-PUBLIC-GitHub:Butterdime/PUBLIC-GitHub.git
+git add setup.sh requirements.txt .env.example Dockerfile .github
+git commit -m "Bootstrap project and CI workflow"
+git push -u origin main
