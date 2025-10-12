@@ -10,12 +10,12 @@ cat ~/.ssh/public-github-deploy.pub
 
 # 3. Configure SSH for this key
 mkdir -p ~/.ssh
-cat <<EOF >> ~/.ssh/config
+cat <<KEYCONF >> ~/.ssh/config
 Host github.com-PUBLIC-GitHub
   HostName github.com
   User git
   IdentityFile ~/.ssh/public-github-deploy
-EOF
+KEYCONF
 chmod 600 ~/.ssh/config
 
 # 4. Create project files
@@ -42,6 +42,7 @@ EXPOSE 5000
 CMD ["flask", "run", "--host=0.0.0.0"]
 EOL
 
+# 5. Create CI workflow
 mkdir -p .github/workflows
 cat <<EOL > .github/workflows/ci.yml
 name: CI
@@ -85,10 +86,3 @@ jobs:
 EOL
 
 chmod +x setup.sh
-
-# 5. Commit and push via deploy key
-git remote remove origin 2>/dev/null || true
-git remote add origin git@github.com-PUBLIC-GitHub:Butterdime/PUBLIC-GitHub.git
-git add setup.sh requirements.txt .env.example Dockerfile .github
-git commit -m "Bootstrap project and CI workflow"
-git push -u origin main
