@@ -1,88 +1,92 @@
 #!/usr/bin/env bash
 set -e
 
-# 1. Generate or overwrite deploy key
-ssh-keygen -t ed25519 -C "deploy@yourserver" -f ~/.ssh/public-github-deploy -N ""
+# Check that GH_PAT is set in the environment
+if [[ -z "${GH_PAT}" ]]; then
+  echo "Error: GH_PAT environment variable is not set. Export GH_PAT before running this script." >&2
+  exit 1
+fi
 
-# 2. Show public key for GitHub
-echo "Add this public key to GitHub Deploy Keys:"
-cat ~/.ssh/public-github-deploy.pub
+echo "Using GH_PAT for HTTPS authentication..."
 
-# 3. Configure SSH for this key
-mkdir -p ~/.ssh
-cat <<KEYCONF >> ~/.ssh/config
-Host github.com-PUBLIC-GitHub
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/public-github-deploy
-KEYCONF
-chmod 600 ~/.ssh/config
+# 1. Copy and populate .env file with Perplexity API credentials
+cp .env.example .env
+read -p "Enter your Perplexity API key: " PERPLEXITY_API_KEY
+read -p "Enter your Perplexity API secret: " PERPLEXITY_API_SECRET
+# Replace placeholders with entered credentials (macOS sed uses a slightly different syntax)
+sed -i "" "s|PERPLEXITY_API_KEY=|PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}|" .env
+sed -i "" "s|PERPLEXITY_API_SECRET=|PERPLEXITY_API_SECRET=${PERPLEXITY_API_SECRET}|" .env
 
-# 4. Create project files
-cat <<EOL > requirements.txt
+echo ".env populated with Perplexity credentials."
+
+# 2. Create requirements.txt
+cat > requirements.txt <<EOF
 Flask
 Flask-SQLAlchemy
 python-dotenv
-EOL
+streamlit
+EOF
 
-cat <<EOL > .env.example
-DATABASE_URL=sqlite:///tasks.db
-PORT=5000
-FLASK_APP=app.py
-FLASK_ENV=development
-EOL
-
-cat <<EOL > Dockerfile
+# 3. Create Dockerfile
+cat > Dockerfile <<EOF
+# Dockerfile for building and running the Flask and Streamlit app
 FROM python:3.11-slim
 WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-EXPOSE 5000
-CMD ["flask", "run", "--host=0.0.0.0"]
-EOL
+RUN pip install --no-cache-dir -r requirements.txt
+CMD ["python", "app.py"]
+EOF
 
-# 5. Create CI workflow
+# 4. Create GitHub Actions CI workflow
 mkdir -p .github/workflows
-cat <<EOL > .github/workflows/ci.yml
+cat > .github/workflows/ci.yml <<EOF
 name: CI
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
+on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      FLASK_APP: app.py
-      FLASK_ENV: testing
-      DATABASE_URL: sqlite:///test_tasks.db
-      PORT: 5000
-
+      GH_PAT: \${{ secrets.GH_PAT }}
+      PERPLEXITY_API_KEY: \${{ secrets.PERPLEXITY_API_KEY }}
+      PERPLEXITY_API_SECRET: \${{ secrets.PERPLEXITY_API_SECRET }}
     steps:
       - uses: actions/checkout@v3
-
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-
+          python-version: 3.11
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install Flask Flask-SQLAlchemy python-dotenv
-
-      - name: Start Flask app
-        run: |
-          env FLASK_APP=app.py nohup python -m flask run --host=0.0.0.0 --port=5000 > flask.log 2>&1 &
-          sleep 10
-
+        run: pip install -r requirements.txt
+      - name: Run flask app in background
+        run: FLASK_ENV=testing nohup python app.py &
       - name: Health check
         run: |
-          curl --retry 5 --retry-delay 2 --retry-connrefused --fail http://localhost:5000/health
-EOL
+          for i in \$(seq 1 5); do
+            if curl --silent --fail http://localhost:5000/health; then
+              echo "Service is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check failed" >&2
+          exit 1
+      - name: Trigger Streamlit redeploy
+        run: |
+          git remote set-url origin "https://x-access-token:\${GH_PAT}@github.com/Butterdime/PUBLIC-GitHub.git"
+          git add .
+          git commit -m "CI: update scaffolding" || echo "No changes to commit"
+          git push origin main
+EOF
 
-chmod +x setup.sh
+# 5. Commit and push changes via HTTPS using GH_PAT
+git add requirements.txt Dockerfile .github/workflows/ci.yml .env
+git commit -m "Bootstrap project: scaffold files and CI configured"
+
+# Set HTTPS remote URL with PAT for authentication
+git remote set-url origin "https://x-access-token:${GH_PAT}@github.com/Butterdime/PUBLIC-GitHub.git"
+
+echo "Pushing changes to origin/main using GH_PAT..."
+
+git push origin main
+
+echo "Bootstrap complete. Changes pushed successfully."
