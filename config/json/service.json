@@ -1,0 +1,26 @@
+{
+  "service_name": "human_ai_framework",
+  "version": "1.0.0",
+  "environment": "production",
+  "features": {
+    "authentication": true,
+    "rate_limiting": true,
+    "caching": false,
+    "monitoring": true
+  },
+  "limits": {
+    "max_requests_per_minute": 1000,
+    "max_concurrent_connections": 100,
+    "timeout_seconds": 30
+  },
+  "integrations": {
+    "database": "postgresql",
+    "cache": "redis",
+    "queue": "rabbitmq"
+  },
+  "metadata": {
+    "created": "2025-10-17",
+    "created_by": "DevOps",
+    "last_modified": "2025-10-17"
+  }
+}
