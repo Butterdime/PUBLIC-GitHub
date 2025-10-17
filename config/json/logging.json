@@ -1,0 +1,20 @@
+{
+  "log_level": "INFO",
+  "log_format": "json",
+  "outputs": [
+    {
+      "type": "stdout",
+      "enabled": true
+    },
+    {
+      "type": "file",
+      "enabled": true,
+      "path": "/var/log/app/application.log",
+      "rotation": "daily",
+      "retention_days": 30
+    }
+  ],
+  "structured_logging": true,
+  "include_timestamp": true,
+  "include_trace_id": true
+}

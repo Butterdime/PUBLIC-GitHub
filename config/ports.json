@@ -1,0 +1,8 @@
+{
+  "approved_port": 8080,
+  "protocol": "tcp",
+  "description": "Primary application port for HUMAN AI FRAMEWORK",
+  "service_name": "app",
+  "last_updated": "2025-10-17",
+  "updated_by": "DevOps"
+}

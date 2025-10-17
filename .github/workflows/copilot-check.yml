@@ -1,0 +1,97 @@
+name: Copilot Configuration Check
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/**'
+      - 'verify_jsons.py'
+      - 'copilot.py'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'config/**'
+      - 'verify_jsons.py'
+      - 'copilot.py'
+  workflow_dispatch:
+    inputs:
+      user_group:
+        description: 'User group (DevOps required for manual runs)'
+        required: true
+        default: 'DevOps'
+
+jobs:
+  copilot-check:
+    runs-on: ubuntu-latest
+    
+    env:
+      SPACE_NAME: HUMAN_AI_FRAMEWORK
+      TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && 'manual' || 'CI pipeline' }}
+      USER_GROUP: ${{ github.event.inputs.user_group || 'CI' }}
+      BACKUP_PATH: /tmp/backups/HUMAN_AI_FRAMEWORK
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run Copilot Assistant
+        id: copilot
+        run: |
+          python copilot.py
+        continue-on-error: false
+      
+      - name: Upload audit logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: audit-logs
+          path: audit/logs.json
+          retention-days: 90
+      
+      - name: Upload backup
+        if: success()
+        uses: actions/upload-artifact@v3
+        with:
+          name: config-backup
+          path: /tmp/backups/HUMAN_AI_FRAMEWORK/
+          retention-days: 30
+      
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const status = '${{ steps.copilot.outcome }}' === 'success' ? '✅' : '❌';
+            const message = `${status} Copilot Configuration Check ${status === '✅' ? 'Passed' : 'Failed'}
+            
+            **Configuration Verification:** ${status}
+            **Trigger:** Pull Request
+            **Space:** ${process.env.SPACE_NAME}
+            
+            See workflow logs for details.`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
+      
+      - name: Block merge on failure
+        if: failure()
+        run: |
+          echo "::error::Copilot check failed. Configuration issues must be resolved before merging."
+          exit 1

@@ -1,0 +1,30 @@
+{
+  "audit_log": [
+    {
+      "timestamp": "2025-10-17T07:36:13.763538",
+      "action": "governance_check",
+      "outcome": "failure",
+      "trigger_source": "manual",
+      "details": "Unauthorized manual run attempt by group: unknown"
+    },
+    {
+      "timestamp": "2025-10-17T07:36:22.525909",
+      "action": "verify",
+      "outcome": "success",
+      "trigger_source": "manual",
+      "details": "All JSON files validated"
+    },
+    {
+      "timestamp": "2025-10-17T07:36:22.528266",
+      "action": "backup",
+      "outcome": "success",
+      "trigger_source": "manual",
+      "details": "{\n  \"logging.json\": {\n    \"status\": \"verified\",\n    \"checksum\": \"1463404c8a435bb88820a64e88af62c9d916a2c6001c921983bbeac718021b87\"\n  },\n  \"service.json\": {\n    \"status\": \"verified\",\n    \"checksum\": \"fff4062a1d222a51f9e225fff83b7e8acafc1ce67ab8a9a5934bdb9af6edbbaa\"\n  }\n}"
+    }
+  ],
+  "metadata": {
+    "created": "2025-10-17",
+    "space_name": "HUMAN_AI_FRAMEWORK",
+    "version": "1.0"
+  }
+}
